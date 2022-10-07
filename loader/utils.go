@@ -41,6 +41,7 @@ type Methods struct {
 	IsHttps  bool
 	IsRemote bool
 
+	// strictMode 表明在校验域名时，域名必须为带`.`号
 	strictMode bool
 
 	UseHostsParser   bool
@@ -84,6 +85,10 @@ func DetectMethods(rawIn string) *Methods {
 	} else {
 		m.IsRemote = false
 	}
+
+	if strictFlag.MatchString(rawIn) {
+		m.strictMode = true
+	}
 	return m
 }
 
@@ -117,7 +122,7 @@ func (m Methods) LoadRules(strictMode bool) ([]string, error) {
 		}
 	}
 
-	if m.IsRemote || m.strictMode {
+	if m.IsRemote || (strictMode || m.strictMode) {
 		resLines = parsers.FuzzyParserSupportWildcard(rawLines, 1)
 	} else {
 		resLines = parsers.LooseParser(rawLines, parsers.DomainParser, 1)
