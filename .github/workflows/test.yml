@@ -1,0 +1,42 @@
+name: TEST
+
+concurrency:
+  group: ci-TEST-${{ github.ref}}
+  cancel-in-progress: true
+
+on:
+  push:
+    branches:
+      - 'main'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Setup Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: 1.19
+
+      - name: Checkout repo
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 1
+
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Get dependence
+        run: |
+          go get
+          go mod tidy
+
+      - name: Test
+        run: |
+          go clean -testcache && go test ./...
