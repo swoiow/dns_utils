@@ -29,6 +29,7 @@ var dnsmasqFlag = regexp.MustCompile(`(?i)dnsmasq\+`)
 var domainFlag = regexp.MustCompile(`(?i)domain\+`)
 
 var strictFlag = regexp.MustCompile(`(?i)strict\+`)
+var localFlag = regexp.MustCompile(`(?i)local\+`)
 
 type Methods struct {
 	RawInput string
@@ -42,7 +43,7 @@ type Methods struct {
 	IsRemote bool
 
 	// strictMode 表明在校验域名时，域名必须为带`.`号
-	strictMode bool
+	StrictMode bool
 
 	UseHostsParser   bool
 	UseSurgeParser   bool
@@ -87,8 +88,11 @@ func DetectMethods(rawIn string) *Methods {
 	}
 
 	if strictFlag.MatchString(rawIn) {
-		m.strictMode = true
+		m.StrictMode = true
+	} else if localFlag.MatchString(rawIn) {
+		m.StrictMode = false
 	}
+
 	return m
 }
 
@@ -122,7 +126,7 @@ func (m Methods) LoadRules(strictMode bool) ([]string, error) {
 		}
 	}
 
-	if m.IsRemote || (strictMode || m.strictMode) {
+	if m.IsRemote || (strictMode || m.StrictMode) {
 		resLines = parsers.FuzzyParserSupportWildcard(rawLines, 1)
 	} else {
 		resLines = parsers.LooseParser(rawLines, parsers.DomainParser, 1)
