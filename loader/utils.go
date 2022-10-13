@@ -23,11 +23,13 @@ var httpFlag = regexp.MustCompile(`(?i)http://`)
 var httpsFlag = regexp.MustCompile(`(?i)https://`)
 var cacheFlag = regexp.MustCompile(`(?i)cache\+`)
 
+// select parsers
 var hostsFlag = regexp.MustCompile(`(?i)hosts\+`)
 var surgeFlag = regexp.MustCompile(`(?i)surge\+`)
 var dnsmasqFlag = regexp.MustCompile(`(?i)dnsmasq\+`)
 var domainFlag = regexp.MustCompile(`(?i)domain\+`)
 
+// control strict mode of parser
 var strictFlag = regexp.MustCompile(`(?i)strict\+`)
 var localFlag = regexp.MustCompile(`(?i)local\+`)
 
@@ -89,8 +91,10 @@ func DetectMethods(rawIn string) *Methods {
 
 	if strictFlag.MatchString(rawIn) {
 		m.StrictMode = true
+		m.OutInput = strictFlag.ReplaceAllLiteralString(m.OutInput, "")
 	} else if localFlag.MatchString(rawIn) {
 		m.StrictMode = false
+		m.OutInput = localFlag.ReplaceAllLiteralString(m.OutInput, "")
 	}
 
 	return m
