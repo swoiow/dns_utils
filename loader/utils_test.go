@@ -1,9 +1,32 @@
 package loader
 
 import (
+	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 )
+
+func (f *Methods) EqualExcept(other *Methods, ExceptField string) bool {
+	// https://stackoverflow.com/questions/47134293/compare-structs-except-one-field-golang
+	val := reflect.ValueOf(f).Elem()
+	otherFields := reflect.Indirect(reflect.ValueOf(other))
+
+	for i := 0; i < val.NumField(); i++ {
+		typeField := val.Type().Field(i)
+		if typeField.Name == ExceptField {
+			continue
+		}
+
+		value := val.Field(i)
+		otherValue := otherFields.FieldByName(typeField.Name)
+
+		if value.Interface() != otherValue.Interface() {
+			return false
+		}
+	}
+	return true
+}
 
 func TestDetectMethods(t *testing.T) {
 	tests := []struct {
@@ -42,10 +65,45 @@ func TestDetectMethods(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := DetectMethods(tt.rawIn); !reflect.DeepEqual(got, tt.want) {
+			if got := DetectMethods(tt.rawIn); !got.EqualExcept(tt.want, "HttpClient") {
 				t.Errorf("DetectMethods() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestMethods_LoadRules_with_dns_error(t *testing.T) {
+	m := DetectMethods("https://github.com/swoiow/blocked/raw/conf/dat/apple.txt")
+	m.SetupResolver("127.0.0.153:15353")
+	_, err := m.LoadRules(false)
+
+	if !strings.Contains(err.Error(), "lookup github.com on") {
+		fmt.Println(err.Error())
+		t.Error("SetupResolver test failed.")
+	}
+}
+
+func TestMethods_LoadRules_with_dns_success(t *testing.T) {
+	m := DetectMethods("https://github.com/swoiow/blocked/raw/conf/dat/apple.txt")
+	m.SetupResolver("1.0.0.1:53")
+	got, err := m.LoadRules(false)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(got) < 0 {
+		t.Error("SetupResolver get data failed.")
+	}
+}
+
+func TestMethods_LoadRules_with_rest_dns_success(t *testing.T) {
+	m := DetectMethods("https://github.com/swoiow/blocked/raw/conf/dat/apple.txt")
+	m.ResetResolver()
+	got, err := m.LoadRules(false)
+	if err != nil {
+		t.Error(err)
+	}
+	if len(got) < 0 {
+		t.Error("SetupResolver get data failed.")
 	}
 }
 
