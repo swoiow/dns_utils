@@ -2,7 +2,9 @@ package loader
 
 import (
 	"bufio"
+	"context"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"regexp"
@@ -10,7 +12,6 @@ import (
 	"time"
 
 	"github.com/bits-and-blooms/bloom/v3"
-	clog "github.com/coredns/coredns/plugin/pkg/log"
 	"github.com/swoiow/dns_utils/parsers"
 )
 
@@ -51,6 +52,8 @@ type Methods struct {
 	UseSurgeParser   bool
 	UseDnsmasqParser bool
 	UseDomainParser  bool
+
+	HttpClient *http.Client
 }
 
 func DetectMethods(rawIn string) *Methods {
@@ -97,7 +100,44 @@ func DetectMethods(rawIn string) *Methods {
 		m.OutInput = localFlag.ReplaceAllLiteralString(m.OutInput, "")
 	}
 
+	tp := http.Transport{
+		IdleConnTimeout: 60 * time.Second,
+	}
+	m.HttpClient = &http.Client{
+		Timeout:   30 * time.Second,
+		Transport: &tp,
+	}
 	return m
+}
+
+func (m Methods) SetupResolver(resolver string) {
+	// https://koraygocmen.medium.com/custom-dns-resolver-for-the-default-http-client-in-go-a1420db38a5d
+	var (
+		dnsResolverIP        = resolver
+		dnsResolverProto     = "udp"
+		dnsResolverTimeoutMs = 4500
+	)
+
+	dialer := &net.Dialer{
+		Resolver: &net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				d := net.Dialer{
+					Timeout: time.Duration(dnsResolverTimeoutMs) * time.Millisecond,
+				}
+				return d.DialContext(ctx, dnsResolverProto, dnsResolverIP)
+			},
+		},
+	}
+
+	dialCtx := func(ctx context.Context, network, addr string) (net.Conn, error) {
+		return dialer.DialContext(ctx, network, addr)
+	}
+	m.HttpClient.Transport.(*http.Transport).DialContext = dialCtx
+}
+
+func (m Methods) ResetResolver() {
+	m.HttpClient.Transport.(*http.Transport).DialContext = nil
 }
 
 func (m Methods) LoadRules(strictMode bool) ([]string, error) {
@@ -117,15 +157,13 @@ func (m Methods) LoadRules(strictMode bool) ([]string, error) {
 	)
 
 	if m.IsRemote {
-		rawLines, err = UrlToLines(m.OutInput)
+		rawLines, err = m.urlToLines(m.OutInput)
 		if err != nil {
-			clog.Error(err)
 			return nil, err
 		}
 	} else {
 		rawLines, err = FileToLines(m.OutInput)
 		if err != nil {
-			clog.Error(err)
 			return nil, err
 		}
 	}
@@ -147,7 +185,7 @@ func (m Methods) LoadCache(filter *bloom.BloomFilter) error {
 	*/
 
 	if m.IsRemote {
-		resp, err := http.Get(m.OutInput)
+		resp, err := m.HttpClient.Get(m.OutInput)
 		if err != nil {
 			return err
 		}
@@ -171,6 +209,18 @@ func (m Methods) LoadCache(filter *bloom.BloomFilter) error {
 	}
 
 	return nil
+}
+
+func (m Methods) urlToLines(url string) ([]string, error) {
+	/* Load rules from remote
+	 */
+
+	resp, err := m.HttpClient.Get(url)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return linesFromReader(resp.Body)
 }
 
 func FileToLines(path string) ([]string, error) {

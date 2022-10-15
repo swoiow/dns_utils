@@ -4,7 +4,6 @@ go 1.19
 
 require (
 	github.com/bits-and-blooms/bloom/v3 v3.3.1
-	github.com/coredns/coredns v1.10.0
 	github.com/google/go-cmp v0.5.9
 )
 
